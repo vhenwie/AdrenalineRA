@@ -71,6 +71,7 @@ other EBOOT-creation tool was used.
 - The matching `systemctrl.prx` and `pentazemin.prx` modules. The VPK ships both;
   Hardcore plugin enforcement and the Adrenaline CFW gate depend on them
 - A RetroAchievements account
+- Modern TLS support plugins like iTLS-Enso (3.60)
 
 No game images, firmware, keys or account credentials are included.
 
