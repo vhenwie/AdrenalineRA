@@ -1,0 +1,45 @@
+/*
+  Adrenaline
+  Copyright (C) 2016-2018, TheFloW
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#ifndef __POPS_H__
+#define __POPS_H__
+
+#include <psp2/display.h>
+#include <psp2/io/fcntl.h>
+#include <psp2/io/stat.h>
+
+extern void *pops_data;
+
+/* Where pspemu renders, as last observed by the compat hook: 1 = into
+ * `pops_data` (our texture), 0 = into its own framebuffer. The display path in
+ * menu.c follows this flag instead of guessing from frame hashes, so the glass
+ * always shows the surface pspemu is actually painting - during play, during the
+ * PS-button prompt, and through the POPS teardown. */
+int ra_pops_redirect_active(void);
+
+int ScePspemuInitAudioOutPatched(void);
+int sceAudioOutOpenPortPatched(int type, int len, int freq, int mode);
+int sceAudioOutOutputPatched(int port, const void *buf);
+int ScePspemuDecodePopsAudioPatched(int a1, int a2, int a3, int a4);
+char *ScePspemuGetTitleidPatched(void);
+int ScePspemuConvertAddressPatched(uint32_t addr, int mode, uint32_t cache_size);
+SceUID sceIoOpenPatched(const char *file, int flags, SceMode mode);
+int sceIoGetstatPatched(const char *file, SceIoStat *stat);
+int sceDisplaySetFrameBufForCompatPatched(int a1, int a2, int a3, int a4, int a5, SceDisplayFrameBuf *pParam);
+
+#endif

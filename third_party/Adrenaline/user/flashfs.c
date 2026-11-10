@@ -1,0 +1,283 @@
+/*
+	Adrenaline
+	Copyright (C) 2016-2018, TheFloW
+
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include <psp2/io/fcntl.h>
+#include <psp2/io/stat.h>
+#include <psp2/kernel/sysmem.h>
+
+#include <stdio.h>
+#include <string.h>
+
+#include "main.h"
+#include "utils.h"
+#include "flashfs.h"
+
+#include "files.h"
+
+#define FLASH0_FILE(path, name) { path, (void *)&_binary_flash0_##name##_start, (int)&_binary_flash0_##name##_size }
+
+INCLUDE_EXTERN_RESOURCE(kd_galaxy_prx);
+INCLUDE_EXTERN_RESOURCE(kd_inferno_prx);
+INCLUDE_EXTERN_RESOURCE(kd_kermit_idstorage_prx);
+INCLUDE_EXTERN_RESOURCE(kd_libpsardumper_prx);
+INCLUDE_EXTERN_RESOURCE(kd_march33_prx);
+INCLUDE_EXTERN_RESOURCE(kd_minimal_edition_prx);
+INCLUDE_EXTERN_RESOURCE(kd_pspbtjnf_bin);
+INCLUDE_EXTERN_RESOURCE(kd_pspbtknf_bin);
+INCLUDE_EXTERN_RESOURCE(kd_pspbtlnf_bin);
+INCLUDE_EXTERN_RESOURCE(kd_pspbtmnf_bin);
+INCLUDE_EXTERN_RESOURCE(kd_pspbtnnf_bin);
+INCLUDE_EXTERN_RESOURCE(kd_pspbtrnf_bin);
+INCLUDE_EXTERN_RESOURCE(kd_systemctrl_prx);
+INCLUDE_EXTERN_RESOURCE(kd_pentazemin_prx);
+INCLUDE_EXTERN_RESOURCE(kd_popcorn_prx);
+INCLUDE_EXTERN_RESOURCE(kd_vshctrl_prx);
+INCLUDE_EXTERN_RESOURCE(kd_janus_prx);
+INCLUDE_EXTERN_RESOURCE(vsh_module_xmbctrl_prx);
+INCLUDE_EXTERN_RESOURCE(vsh_module_recovery_prx);
+INCLUDE_EXTERN_RESOURCE(vsh_module_satelite_prx);
+INCLUDE_EXTERN_RESOURCE(vsh_module_satelite_classic_prx);
+
+typedef struct {
+	const char *name;
+	const void *buffer;
+	uint32_t size;
+} ScePspemuFlash0Package;
+
+static const ScePspemuFlash0Package custom_package[] = {
+	FLASH0_FILE("/kd/galaxy.prx",           kd_galaxy_prx),
+	FLASH0_FILE("/kd/inferno.prx",          kd_inferno_prx),
+	FLASH0_FILE("/kd/kermit_idstorage.prx", kd_kermit_idstorage_prx),
+	FLASH0_FILE("/kd/libpsardumper.prx",    kd_libpsardumper_prx),
+	FLASH0_FILE("/kd/march33.prx",          kd_march33_prx),
+	FLASH0_FILE("/kd/minimal_edition.prx",  kd_minimal_edition_prx),
+	FLASH0_FILE("/kd/pspbtjnf.bin",         kd_pspbtjnf_bin),
+	FLASH0_FILE("/kd/pspbtknf.bin",         kd_pspbtknf_bin),
+	FLASH0_FILE("/kd/pspbtlnf.bin",         kd_pspbtlnf_bin),
+	FLASH0_FILE("/kd/pspbtmnf.bin",         kd_pspbtmnf_bin),
+	FLASH0_FILE("/kd/pspbtnnf.bin",         kd_pspbtnnf_bin),
+	FLASH0_FILE("/kd/pspbtrnf.bin",         kd_pspbtrnf_bin),
+	FLASH0_FILE("/kd/systemctrl.prx",       kd_systemctrl_prx),
+	FLASH0_FILE("/kd/pentazemin.prx",       kd_pentazemin_prx),
+	FLASH0_FILE("/kd/popcorn.prx",          kd_popcorn_prx),
+	FLASH0_FILE("/kd/vshctrl.prx",          kd_vshctrl_prx),
+	FLASH0_FILE("/kd/janus.prx",            kd_janus_prx),
+	FLASH0_FILE("/vsh/module/xmbctrl.prx",  vsh_module_xmbctrl_prx),
+	FLASH0_FILE("/vsh/module/recovery.prx", vsh_module_recovery_prx),
+	FLASH0_FILE("/vsh/module/satelite.prx", vsh_module_satelite_prx),
+	FLASH0_FILE("/vsh/module/satelite_classic.prx", vsh_module_satelite_classic_prx),
+};
+
+static void addFile(const char *name, const void *buffer, uint32_t size, void *data, uint32_t *pkg_ptr, uint32_t *name_ptr, uint32_t *buffer_ptr) {
+	// Buffer
+	*buffer_ptr = ALIGN(*buffer_ptr, 0x40);
+
+	// Skip files that would not fit in the package instead of overflowing it
+	if (*buffer_ptr + size > SCE_PSPEMU_FLASH0_PACKAGE_SIZE) {
+		return;
+	}
+
+	memcpy((uint8_t *)data + *buffer_ptr, buffer, size);
+
+	// Name
+	strcpy((char *)data + *name_ptr, name);
+
+	// Header
+	ScePspemuFlash0Package *header = (ScePspemuFlash0Package *)((uint8_t *)data + *pkg_ptr);
+	header->name = (const char *)(SCE_PSPEMU_EXTRA_MEMORY + *name_ptr);
+	header->buffer = (const void *)(SCE_PSPEMU_EXTRA_MEMORY + *buffer_ptr);
+	header->size = size;
+
+	// Increase
+	(*pkg_ptr) += sizeof(ScePspemuFlash0Package);
+	(*name_ptr) += strlen(name) + 1;
+	(*buffer_ptr) += size;
+}
+
+
+static int install_kd_resource(const uint8_t *source, int source_size,
+	const char *name) {
+	static const char * const roots[] = {
+		"ux0:data/" ADRENALINE_TITLEID,
+		"ux0:app/" ADRENALINE_TITLEID
+	};
+	char flash0[128];
+	char kd[160];
+	char dst[192];
+	SceIoStat stat;
+	int i;
+
+	for (i = 0; i < 2; ++i) {
+		SceUID fd;
+		int written;
+
+		snprintf(flash0, sizeof(flash0), "%s/flash0", roots[i]);
+		if (sceIoGetstat(flash0, &stat) < 0)
+			continue;
+		snprintf(kd, sizeof(kd), "%s/kd", flash0);
+		sceIoMkdir(kd, 0777);
+		snprintf(dst, sizeof(dst), "%s/%s", kd, name);
+		if (sceIoGetstat(dst, &stat) >= 0 &&
+			stat.st_size == source_size)
+			continue;
+		fd = sceIoOpen(dst, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+		if (fd < 0)
+			continue;
+		written = sceIoWrite(fd, source, source_size);
+		sceIoClose(fd);
+		if (written != source_size)
+			return 0;
+	}
+	return 1;
+}
+
+int ScePspemuInstallPentazemin(void) {
+	int ok = install_kd_resource(
+		(const uint8_t *)&_binary_flash0_kd_pentazemin_prx_start,
+		(int)&_binary_flash0_kd_pentazemin_prx_size, "pentazemin.prx");
+
+	ok &= install_kd_resource(
+		(const uint8_t *)&_binary_flash0_kd_systemctrl_prx_start,
+		(int)&_binary_flash0_kd_systemctrl_prx_size, "systemctrl.prx");
+	return ok;
+}
+
+int ScePspemuBuildFlash0(void) {
+	void *flash0_data = NULL;
+
+	// Allocate flash0 memory
+	SceUID flash0_blockid = sceKernelAllocMemBlock("ScePspemuFlash0", SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_PSPEMU_FLASH0_PACKAGE_SIZE, NULL);
+	if (flash0_blockid < 0) {
+		return flash0_blockid;
+	}
+
+	// Get base address
+	sceKernelGetMemBlockBase(flash0_blockid, (void **)&flash0_data);
+
+	// Clear flash0 data
+	memset(flash0_data, 0, SCE_PSPEMU_FLASH0_PACKAGE_SIZE);
+
+	ScePspemuFlash0Package *flash0_package = (ScePspemuFlash0Package *)(data_addr + 0xB9080);
+
+	uint32_t pkg_ptr = 0, name_ptr = 0x1000, buffer_ptr = 0x2000;
+	uint32_t i = 0, j = 0;
+
+	// Add custom package
+	for (i = 0; i < (sizeof(custom_package) / sizeof(custom_package[0])); i++) {
+		addFile(custom_package[i].name, custom_package[i].buffer, custom_package[i].size, flash0_data, &pkg_ptr, &name_ptr, &buffer_ptr);
+	}
+
+	// Add package
+	for (i = 0; i < N_FILES; i++) {
+		while (flash0_package[j].buffer != NULL) {
+			const char *name = (const char *)((uint32_t)flash0_package[j].name - SCE_PSPEMU_EXTRA_MEMORY + (uint32_t)flash0_package);
+			const void *buffer = (const void *)((uint32_t)flash0_package[j].buffer - SCE_PSPEMU_EXTRA_MEMORY + (uint32_t)flash0_package);
+			uint32_t size = flash0_package[j].size;
+
+			if (strcmp(files[i], name) == 0) {
+				addFile(name, buffer, size, flash0_data, &pkg_ptr, &name_ptr, &buffer_ptr);
+				break;
+			}
+
+			j++;
+		}
+	}
+
+	// Copy to .data
+	memcpy(flash0_package, flash0_data, SCE_PSPEMU_FLASH0_PACKAGE_SIZE);
+
+	// Copy to 0x8B000000
+	void *flash0_package_psp = (void *)ScePspemuConvertAddress(SCE_PSPEMU_EXTRA_MEMORY, KERMIT_OUTPUT_MODE, SCE_PSPEMU_FLASH0_PACKAGE_SIZE);
+	memcpy(flash0_package_psp, flash0_data, SCE_PSPEMU_FLASH0_PACKAGE_SIZE);
+	ScePspemuWritebackCache(flash0_package_psp, SCE_PSPEMU_FLASH0_PACKAGE_SIZE);
+
+	// Free block
+	sceKernelFreeMemBlock(flash0_blockid);
+
+	// Make flash0 list
+	ScePspemuFlash0Package *flash0_list = (ScePspemuFlash0Package *)(data_addr + 0xB7E88);
+	memset(flash0_list, 0, 187 * sizeof(ScePspemuFlash0Package));
+
+	i = 0;
+	while (flash0_package[i].buffer != NULL) {
+		const char *name = (const char *)((uint32_t)flash0_package[i].name - SCE_PSPEMU_EXTRA_MEMORY + (uint32_t)flash0_package);
+		const void *buffer = (const void *)((uint32_t)flash0_package[i].buffer - SCE_PSPEMU_EXTRA_MEMORY + (uint32_t)flash0_package);
+		uint32_t size = flash0_package[i].size;
+
+		flash0_list[i].name = name;
+		flash0_list[i].buffer = buffer;
+		flash0_list[i].size = size;
+
+		i++;
+	}
+
+	// Fix this weird thing
+	uint32_t n_files = i;
+
+	for (i = 0; i < 141; i++) {
+		*(uint8_t *)(data_addr + 0x40D4 + i) = (i < n_files) ? (uint8_t)i : 0;
+	}
+
+	return 0;
+}
+
+int ScePspemuLoadFlash0Ark(void) {
+	// read flash0 ark package
+	char ark_path[64];
+	snprintf(ark_path, sizeof(ark_path), "%s" FLASH0_ARK_PATH, getPspemuMemoryStickLocation());
+	SceUID fd = sceIoOpen(ark_path, SCE_O_RDONLY, 0777);
+
+	if (fd < 0) {
+		// Try again on `ux0:` just to be sure
+		fd = sceIoOpen("ux0:pspemu" FLASH0_ARK_PATH, SCE_O_RDONLY, 0777);
+
+		if (fd < 0) {
+			return fd;
+		}
+	}
+
+	void *flash0_data = NULL;
+
+	// Allocate flash0 memory
+	SceUID flash0_blockid = sceKernelAllocMemBlock("ScePspemuFlash0", SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, FLASH0_ARK_SIZE, NULL);
+	if (flash0_blockid < 0) {
+		sceIoClose(fd);
+		return flash0_blockid;
+	}
+
+	// Get base address
+	sceKernelGetMemBlockBase(flash0_blockid, (void **)&flash0_data);
+
+	memset(flash0_data, 0, FLASH0_ARK_SIZE);
+
+	int read_bytes = sceIoRead(fd, flash0_data, FLASH0_ARK_SIZE);
+	sceIoClose(fd);
+
+	if (read_bytes < 0) {
+		sceKernelFreeMemBlock(flash0_blockid);
+		return read_bytes;
+	}
+
+	uint32_t *m = (uint32_t *)ScePspemuConvertAddress(FLASH0_ARK_ADDR, KERMIT_OUTPUT_MODE, FLASH0_ARK_SIZE);
+	memcpy(m, flash0_data, FLASH0_ARK_SIZE);
+	ScePspemuWritebackCache(m, FLASH0_ARK_SIZE);
+
+	sceKernelFreeMemBlock(flash0_blockid);
+
+	return 0;
+}

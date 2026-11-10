@@ -1,0 +1,46 @@
+diff --git a/libvita2d/source/utils.c b/libvita2d/source/utils.c
+index 86825e3..87fdff2 100644
+--- a/libvita2d/source/utils.c
++++ b/libvita2d/source/utils.c
+@@ -270,7 +270,7 @@ void matrix_init_perspective(float *m, float fov, float aspect, float near, floa
+ 
+ uint32_t utf8_character(const char** unicode)
+ {
+-	char byte = **unicode;
++	unsigned char byte = **unicode;
+ 	++*unicode;
+ 	if (!(byte & 0x80)) {
+ 		return byte;
+diff --git a/libvita2d/include/vita2d.h b/libvita2d/include/vita2d.h
+index e74df62..8c13e2f 100644
+--- a/libvita2d/include/vita2d.h
++++ b/libvita2d/include/vita2d.h
+@@ -93,6 +93,7 @@ void vita2d_start_drawing_advanced(vita2d_texture *target, vita2d_start_drawing_
+ void vita2d_end_drawing();
+ 
+ int vita2d_common_dialog_update();
++void vita2d_clear_back_buffer();
+ 
+ void vita2d_set_clear_color(unsigned int color);
+ void vita2d_set_vblank_wait(int enable);
+diff --git a/libvita2d/source/vita2d.c b/libvita2d/source/vita2d.c
+index 47b15f3..5ac1218 100644
+--- a/libvita2d/source/vita2d.c
++++ b/libvita2d/source/vita2d.c
+@@ -800,6 +800,15 @@ int vita2d_common_dialog_update()
+ 	return sceCommonDialogUpdate(&updateParam);
+ }
+ 
++/* CPU-clear the back buffer used by the common dialog. This mirrors the
++ * official IME sample and avoids submitting a GXM scene while the common
++ * dialog owns the display path. */
++void vita2d_clear_back_buffer()
++{
++	memset(displayBufferData[backBufferIndex], 0,
++	       4 * DISPLAY_STRIDE_IN_PIXELS * DISPLAY_HEIGHT);
++}
++
+ void vita2d_set_clear_color(unsigned int color)
+ {
+ 	clear_color[0] = ((color >> 8*0) & 0xFF)/255.0f;
+

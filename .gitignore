@@ -1,0 +1,32 @@
+# Build outputs
+build/
+out/
+dist/
+*.vpk
+*.self
+*.velf
+*.suprx
+*.skprx
+*.prx
+*.elf
+*.o
+*.a
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+
+# Local data
+*.log
+logs/
+screenshots/
+*.psp2dmp
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Prebuilt Adrenaline kernel/vsh resources required by the production build.
+!third_party/Adrenaline/user/flash0/kd/*.prx
+!third_party/Adrenaline/user/flash0/vsh/module/*.prx

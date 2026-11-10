@@ -1,0 +1,23 @@
+add_cef_prx(galaxy
+  SRC_FILES
+    src/main.c
+    src/syspatches.c
+    ../../bits/iso_common.c
+  LINK_STATICS
+    pspsdk
+    cisoread
+  LINK_STUBS
+    pspinit_kernel
+    psputils_kernel
+    pspsysmem_kernel
+    pspkernel_library
+    pspsysclib_kernel
+    psploadcore_kernel
+    pspthreadman_kernel
+    pspiofilemgr_kernel
+    pspsystemctrl_kernel
+    pspstdio_kernel
+	pspumd_driver
+)
+
+copy_prx_flash0(galaxy GalaxyController)
