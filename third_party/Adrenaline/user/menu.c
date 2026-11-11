@@ -1821,6 +1821,7 @@ int AdrenalineDraw(SceSize args, void *argp) {
 	 * heap sizes next to it, says whether the process was also running out of
 	 * memory at that moment. */
 	static int ps_window_frames;
+	static int shell_handback;
 
 	while (1) {
 		int draw_native = *(uint32_t *)CONVERT_ADDRESS(DRAW_NATIVE);
@@ -1829,6 +1830,24 @@ int AdrenalineDraw(SceSize args, void *argp) {
 		ra_runtime_tick(adrenaline, menu_open != 0 ||
 		                sceCommonDialogIsRunning() != 0);
 		ra_menu_tick(adrenaline);
+
+		/* On the XMB with no menu, pspemu owns the screen. A non-Original
+		 * graphics filter otherwise leaves this loop compositing a cached
+		 * game surface over the XMB, which is the reported black screen.
+		 * Hand the framebuffer back once and keep pspemu's presentation. */
+		if (ra_runtime_in_shell() && !menu_open && !g_exiting &&
+		    !g_menu_open_request) {
+			if (!shell_handback) {
+				sceGxmDisplayQueueFinish();
+				SetPspemuFrameBuffer((void *)SCE_PSPEMU_FRAMEBUFFER);
+				sceDisplayWaitVblankStart();
+				shell_handback = 1;
+				ra_menu_log("draw: shell handback; pspemu owns the XMB\n");
+			}
+			sceDisplayWaitVblankStart();
+			continue;
+		}
+		shell_handback = 0;
 
 		{
 			int ra_count = 0;
@@ -2039,9 +2058,33 @@ int AdrenalineDraw(SceSize args, void *argp) {
 			}
 		}
 
-		// Fast forward in pops. RA Hardcore allows fast-forward; only rewind,
-		// slow-motion and frame advance are prohibited.
+		// Fast forward in pops. Hardcore disables it: RA evaluation is
+		// vblank-driven, and fast-forward can advance more than one emulated
+		// frame per vblank. A hit condition can then be sampled less often than
+		// the game runs, which is exactly the leaderboard hole reported upstream.
 		if (adrenaline->pops_mode) {
+			int hardcore = ra_menu_hardcore_active();
+
+			/* If fast-forward was left on before Hardcore became effective,
+			 * turn it off once pspemu can be reached. */
+			static int ff_off_checked;
+			if (hardcore) {
+				if (!ff_off_checked) {
+					uint8_t *ff = (uint8_t *)ScePspemuConvertAddress(
+					    0xABCD00A9, KERMIT_OUTPUT_MODE, 1);
+					if (ff != NULL) {
+						if (*ff) {
+							*ff = 0;
+							ScePspemuWritebackCache(ff, 1);
+							ra_menu_log("pad: fast-forward forced off in hardcore\n");
+						}
+						ff_off_checked = 1;
+					}
+				}
+			} else {
+				ff_off_checked = 0;
+			}
+
 			// FSM for button combination
 			static int combo_state = 0;
 			if (current_pad[PAD_LTRIGGER] && current_pad[PAD_SELECT]) {
@@ -2055,19 +2098,24 @@ int AdrenalineDraw(SceSize args, void *argp) {
 			}
 
 			if (combo_state == 2) {
-				uint8_t *val = (uint8_t *)ScePspemuConvertAddress(0xABCD00A9, KERMIT_OUTPUT_MODE, 1);
-				/* 00.10.127: this was the one store in the file with no guard on
-				 * its conversion. A NULL result (pspemu between instances, the
-				 * state right after a media change) went straight into a strided
-				 * write through address 0, which is how a fault ends up reported
-				 * at an address that is not code. */
-				if (val != NULL) {
-					*val = !(*val);
-					ScePspemuWritebackCache(val, 1);
+				if (hardcore) {
+					ra_menu_log("pad: fast-forward toggle blocked in hardcore\n");
 				} else {
-					ra_menu_log("pad: fast-forward toggle skipped; conversion "
-					            "returned NULL (pops=%d)\n",
-					            (int)adrenaline->pops_mode);
+					uint8_t *val = (uint8_t *)ScePspemuConvertAddress(
+					    0xABCD00A9, KERMIT_OUTPUT_MODE, 1);
+					/* 00.10.127: this was the one store in the file with no guard on
+					 * its conversion. A NULL result (pspemu between instances, the
+					 * state right after a media change) went straight into a strided
+					 * write through address 0, which is how a fault ends up reported
+					 * at an address that is not code. */
+					if (val != NULL) {
+						*val = !(*val);
+						ScePspemuWritebackCache(val, 1);
+					} else {
+						ra_menu_log("pad: fast-forward toggle skipped; conversion "
+						            "returned NULL (pops=%d)\n",
+						            (int)adrenaline->pops_mode);
+					}
 				}
 				combo_state = 0;
 			}

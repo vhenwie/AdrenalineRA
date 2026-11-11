@@ -64,6 +64,11 @@
 #include "../adrenaline_vita.h"
 #include "../adrenaline_version.h"
 
+#if ADRENALINE_VERSION_MAJOR != 8 || ADRENALINE_VERSION_MINOR != 0 || \
+    ADRENALINE_VERSION_MICRO != 2
+#error "AdrenalineRA must be built against the pinned Adrenaline 8.0.2 base"
+#endif
+
 
 INCLUDE_EXTERN_RESOURCE(payloadex_bin);
 INCLUDE_EXTERN_RESOURCE(payloadex_ark_bin);

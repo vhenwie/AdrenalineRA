@@ -53,7 +53,7 @@
 #define RA_BADGE_WARM_PREFETCH 1
 #define RA_RUNTIME_WARNING_ACHIEVEMENT_ID 101000001u
 
-#define RA_RUNTIME_BUILD_TAG "1.0.0-rewrite"
+#define RA_RUNTIME_BUILD_TAG "1.0.1-rewrite"
 #define RA_ENABLE_POPS 1
 /* RC_ACHIEVEMENT_SET_TYPE_CORE (rc_api_runtime.h); never a selectable subset. */
 #define RA_SUBSET_TYPE_CORE 0

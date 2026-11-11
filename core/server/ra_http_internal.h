@@ -8,7 +8,7 @@
 
 #include "ra_http.h"
 
-#define RA_HTTP_UA_PROD "Adrenaline/8.0.2 (PS Vita)"
+#define RA_HTTP_UA_PROD "AdrenalineRA/1.0.1 (PS Vita) Adrenaline/8.0.2"
 extern char g_user_agent[128];
 extern SceUID g_http_gate;
 extern int g_http_template;

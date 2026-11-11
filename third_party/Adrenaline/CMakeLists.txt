@@ -10,6 +10,32 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 project(adrenaline)
 include("${VITASDK}/share/vita.cmake" REQUIRED)
 
+# The production release is built and tested against one Adrenaline base.
+# Do not silently build against an older or newer Adrenaline tree.
+set(RA_ADRENALINE_BASE_MAJOR 8)
+set(RA_ADRENALINE_BASE_MINOR 0)
+set(RA_ADRENALINE_BASE_MICRO 2)
+set(RA_ADRENALINE_VERSION_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/adrenaline_version.h")
+if(NOT EXISTS "${RA_ADRENALINE_VERSION_HEADER}")
+  message(FATAL_ERROR "AdrenalineRA requires the Adrenaline version header")
+endif()
+file(READ "${RA_ADRENALINE_VERSION_HEADER}" RA_ADRENALINE_VERSION_TEXT)
+foreach(_adr_part MAJOR MINOR MICRO)
+  string(REGEX MATCH "#define[ ]+ADRENALINE_VERSION_${_adr_part}[ ]+([0-9]+)"
+         _adr_match "${RA_ADRENALINE_VERSION_TEXT}")
+  if(CMAKE_MATCH_1 STREQUAL "")
+    message(FATAL_ERROR "Cannot read ADRENALINE_VERSION_${_adr_part}")
+  endif()
+  set(RA_ADRENALINE_VERSION_${_adr_part} "${CMAKE_MATCH_1}")
+endforeach()
+if(NOT RA_ADRENALINE_VERSION_MAJOR EQUAL RA_ADRENALINE_BASE_MAJOR OR
+   NOT RA_ADRENALINE_VERSION_MINOR EQUAL RA_ADRENALINE_BASE_MINOR OR
+   NOT RA_ADRENALINE_VERSION_MICRO EQUAL RA_ADRENALINE_BASE_MICRO)
+  message(FATAL_ERROR
+    "AdrenalineRA requires Adrenaline ${RA_ADRENALINE_BASE_MAJOR}.${RA_ADRENALINE_BASE_MINOR}.${RA_ADRENALINE_BASE_MICRO}; found ${RA_ADRENALINE_VERSION_MAJOR}.${RA_ADRENALINE_VERSION_MINOR}.${RA_ADRENALINE_VERSION_MICRO}")
+endif()
+message(STATUS "AdrenalineRA base: Adrenaline ${RA_ADRENALINE_BASE_MAJOR}.${RA_ADRENALINE_BASE_MINOR}.${RA_ADRENALINE_BASE_MICRO}")
+
 # The RA gate record and crypto helpers live in the repo-level core/server tree.
 # All Vita targets that include adrenaline_vita.h need this include path.
 include_directories(${CMAKE_SOURCE_DIR}/../../core/server)

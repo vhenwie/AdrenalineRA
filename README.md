@@ -6,7 +6,8 @@ AdrenalineRA is not an emulator. It runs inside Adrenaline 8.0.2 and uses
 Adrenaline's own menu, notifications and display path, so achievements, leaderboards
 and rich presence behave like part of the system rather than an external overlay.
 
-- Version: 1.0.0
+- Version: 1.0.1
+- Client identity: `AdrenalineRA/1.0.1 (PS Vita) Adrenaline/8.0.2`
 - Platform: PS Vita 3.60+ (Tested on 3.60 only)
 - Base: Adrenaline 8.0.2
 - Modes: PSP games and PS1 games through POPS
@@ -41,6 +42,7 @@ running through POPS.
 - Badge and game artwork caching
 - Automatic screenshots on unlock
 - Hardcore and Casual sessions, Encore, spectator mode and unofficial achievements
+- Hardcore disables save-state loading, cheat plugins and POPS fast-forward
 - Per-page options for notifications, badges, indicators, screenshots, and sound
 - PSP and POPS support, including Multi-disk titles
 
@@ -114,6 +116,10 @@ cmake -S third_party/Adrenaline -B ../../out/prod-build -G Ninja \
 
 cmake --build ../../out/prod-build --target Adrenaline.vpk-vpk -j4
 ```
+
+The build refuses to configure unless `adrenaline_version.h` reports exactly
+Adrenaline 8.0.2. The same check is compiled into `user/main.c`, so a build that
+bypasses the CMake guard also fails instead of producing a mixed release.
 
 The VPK is written to `../../out/prod-build/bubble/Adrenaline.vpk`.
 

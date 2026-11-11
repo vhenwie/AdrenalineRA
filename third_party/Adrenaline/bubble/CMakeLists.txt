@@ -12,6 +12,7 @@ project(adrenaline)
 include("${VITASDK}/share/vita.cmake" REQUIRED)
 set(VITA_APP_NAME "Adrenaline")
 set(VITA_TITLEID  "PSPEMUCFW")
+set(VITA_VERSION  "01.01")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wl,-q -Wall -O3")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions")
